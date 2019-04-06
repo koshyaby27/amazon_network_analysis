@@ -8,4 +8,9 @@ Amazon uses recommendation-based marketing to suggest frequently co purchased it
 Customers tend to purchase these recommended items if put on display & especially on discount.
 Using network analysis, we can find the pattern of these popular, consistent & valuable item co purchases.
 
-Tech used: R Packages used: igraph , dplyr, ggplot, tidyverse
+Link to data set:
+
+http://snap.stanford.edu/data/amazon-meta.html
+
+
+Tech used: R Packages used: igraph , dplyr, ggplot, sqldf, data.table.
