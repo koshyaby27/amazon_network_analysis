@@ -1,0 +1,377 @@
+---
+title: "Amazon Co-Purchase Network Analysis"
+author: "Aby Koshy"
+output:
+  html_document:
+    code_folding: hide
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, error = TRUE)
+```
+
+## Introduction
+
+Online shopping has become popular nowadays. There are several reasons why people prefer shopping online than visiting a traditional shop. The online retailers have generated a huge amount of profit along with retaining a business model, converting it into a great business. Here we are planning to analyze a network dataset from Amazon to understand customers’ purchasing patterns/habits. The notable feature of such kind of network is the next product the customer would purchases, also known as the co-purchase.  
+
+Through analyzing the co-purchase patterns, we intend to build a knowledge-base to further recommend potential co-purchase items for each item.  
+
+* Amazon uses recommendation-based marketing to suggest frequently co purchased items.
+* Customers tend to purchase these recommended items if put on display & especially on discount.
+* Using network analysis, we can find the pattern of these popular, consistent & valuable item co purchases.  
+  
+## Overview of Data
+  
+The dataset we use is Amazon product co-purchasing network metadata from Stanford Network Analysis Project.   
+
+**Link to data set:**    
+
+http://snap.stanford.edu/data/amazon-meta.html
+  
+The data was collected by crawling Amazon website and contains product metadata and review information about 548,552 different products, including Books, music CDs, DVDs and VHS video tapes. 
+
+For each product the following information is available:
+* Title
+* Sales rank
+* List of similar products (that get co-purchased with the current product)
+* Detailed product categorization
+* Product reviews: time, customer, rating, number of votes, number of people that found the review helpful
+  
+## Data Preparation & Cleaning  
+  
+* The data downloaded from the data source was a text file with attribute and value in asymmetric manner.
+* With the use of R packages such as tidyr, foreach, data.table, sqldf we have converted the data into meaningful form.
+* There are 5868 products which are discontinued. Those products just have the ID. All the other attributes are “NA”. We replaced them with “Discontinued Product”.
+* The major chunk of products are DVD, Video, Music or Books. All the other products has been categorized as ”Others”.
+  
+<center>
+
+![**The Data before cleaning or processing**](Data/Picture1.png)
+
+</center>
+
+<center>
+
+![**The metadata after cleaning and processing**](Data/Picture2.png)
+
+</center>  
+
+## Scope  
+  
+* Recommendation systems could be empowered by leveraging power of co purchase networks.
+
+* Network statistics & properties could be analyzed to determine valuable items that consistently generate demand or are purchased after others.
+  
+## Objective  
+  
+**Determine:**  
+
+* Valuable item co-purchase pairs.
+* The category of items which would more likely to generate demand for others.
+* Items which go with others.
+* Pairs of popular items that would stay popular longer than others
+* Whether the co-purchases would be more likely in the same category or not
+* Any correlation between co-purchases items and other factors: people tends to buy co-purchase items when their reviews are good (rating and votes) or when they are hugely discounted
+
+**Mapping:**  
+
+* Visualize co-purchasing network of one category of products from Amazon 
+  
+## Methodology  
+  
+**Community Detection and Segregation.**  
+
+* Identify the “small” communities by optimizing modularity locally.  
+* Aggregate nodes belonging to same community and build a new network whose nodes are communities.  
+
+**Analysis**  
+
+* Evaluate hubs of the nodes within same community to understand patterns in product co-purchases.  
+  
+## EDA  
+  
+**Divided our analysis to 5 steps.**  
+  
+* Create Network Graph and Diagnose Network.
+* Create Communities Using InfoMap algorithm.
+* Identify top communities based on average degree of the nodes and community visualization.
+* Identify top products based on Sales Rank.
+* Identify Cliques within the top community which includes top product within the community.  
+
+**Process Flow**
+
+First in the analysis we have figured out the giant components. The next step was to cluster the products together into logical co-purchasing groups. In the net level of clustering , each community has been divided into sub communities.  
+  
+<center>
+
+![**Sub-community created after community detection**](Data/1.png)
+
+</center>
+  
+The next level of community detection creates sub-communities that ensuresa second level of clustering. As a result of the two-phase community detection, only nodes that are densely connected will be clustered together.
+
+<center>
+
+![**Division of community into sub-communities**](Data/2.png)
+
+</center>
+  
+The cluster function in the initial step checks for the connected components in the graph.The initial cluster has 402264 connected vertices and all of them are not connected with each other. The degree fuction was used here to calculate the total number of degree for each vertex.  
+  
+We have used the **infomap** function to create different communities with in the network graph.  
+  
+With the help of **igraph** function, created a new graph by merging several vertices into one. The vertices in the new graph corresponds to the set of vertices in the input graph.  
+  
+```{r, message=FALSE, warning=FALSE, collapse=TRUE}
+
+##############################################################################################################################
+#load all necessary packages and setup the path and remove all data present in r environment
+##############################################################################################################################
+install.packages("igraph")
+install.packages("dplyr")
+library(igraph)
+library(dplyr)
+
+#Set the directory path to the path where file is located
+
+setwd("~/Desktop/MSDA/Late Fall 2018/ANLY 512/New Project/Data")
+
+
+#remove all the data present in the r environment  
+rm(list=ls())
+
+#supress warning messages 
+options(warn=0)
+
+##############################################################################################################################
+#Create and Diagnose Graph Network 
+# 1) Read Node Metadata and EdgeList Files and create network graph 
+# 2) Run Network Statistics 
+##############################################################################################################################
+
+coPurchaseEdgeList <- read.csv("coPurchaseEdgeList.csv")
+coPurchaseMeta <- read.csv("coPurchaseMeta.csv")
+
+
+
+coPurchaseNetworkGraph <- graph.data.frame(d = coPurchaseEdgeList, vertices = coPurchaseMeta,directed = T) 
+
+# Remove unnecessary objects from workspace
+remove(coPurchaseEdgeList)
+remove(coPurchaseMeta)
+
+########################################################################################################
+###descriptive stats
+########################################################################################################
+summary(coPurchaseNetworkGraph)
+is.connected(coPurchaseNetworkGraph)    
+cl <- clusters(coPurchaseNetworkGraph)  
+str(cl)
+cl$csize      
+
+Degree <- degree(coPurchaseNetworkGraph, mode = "total")   
+
+#sorting descending order
+Degree <- sort(Degree, decreasing = T)   
+head(as.data.frame(Degree))
+
+# eigenvector centrality
+EVcentrality <- evcent(coPurchaseNetworkGraph)    
+EVcentrality <- EVcentrality$vector   # convert to array
+EVcentrality <- sort(EVcentrality, decreasing = T)
+head(as.data.frame(EVcentrality))
+
+
+avgcc <- transitivity(coPurchaseNetworkGraph, type = "average", isolates = "zero") #average clustering coeff
+avgcc
+
+
+
+##############################################################################################################################
+# A) Create Communities using InfoMaps Algorithm
+# B) Attach communityId to the Network Graph Node Attribute 
+##############################################################################################################################
+
+# Create Communities 
+coPurchaseCommunity <- infomap.community(coPurchaseNetworkGraph) 
+
+# Attach community Membership as a vertex attribute 
+coPurchaseNetworkGraph <-  set.vertex.attribute(coPurchaseNetworkGraph, "Community", value = coPurchaseCommunity$membership)  
+
+##############################################################################################################################
+# A) Identify top communities based on average degree of the nodes
+# B) Visualizing Communities:
+##############################################################################################################################
+
+topCommunities = function(networkGraph, topCommunityCount = 5){
+  
+  # Create a new graph where we contract all vertices in a single community to one vertice, and find the average degree
+  coPurchaseCommunityGraph <-  contract.vertices(networkGraph, V(networkGraph)$Community, vertex.attr.comb = list(Degree ="mean", Community=toString))
+  
+  # save average degree associated with communities within a vector 
+  communityMeanDegreeVector <- V(coPurchaseCommunityGraph)$Degree
+  
+  # get community list 
+  communityList <- V(coPurchaseCommunityGraph)$Community
+  
+  # Save community number in a list 
+  communityNumericVectorList <- lapply(communityList, function(x){as.vector(as.numeric(strsplit(x, ",")[[1]]))})
+  
+  # Save community membership into a vector 
+  communityMembershipVector <-  sapply(communityNumericVectorList, function(x){(x)[1]})
+  
+  # Compute number of vertices within a community and save it to a vector  
+  communityNodeCountVector <- sapply(communityNumericVectorList, function(x){length(x)})
+  
+  # Create dataframe
+  communityDetailsDataFrame <- data.frame(communityMembershipVector,communityMeanDegreeVector,communityNodeCountVector)
+  
+  # Order rows based on communityMeanSalesRankVector
+  communityDetailsDataFrame <- arrange(communityDetailsDataFrame,desc(communityMeanDegreeVector))
+  
+  # Change column names
+  colnames(communityDetailsDataFrame) <- c("communityMembership","communityMeanDegree","communityNodeCount")
+  
+  # Return Top Communities 
+  return(head(communityDetailsDataFrame,topCommunityCount))
+  
+}
+
+
+topCommunities(coPurchaseNetworkGraph)
+
+
+# Visualizing Communities
+
+communityGraph <-
+  induced.subgraph(coPurchaseNetworkGraph, which(V(coPurchaseNetworkGraph)$Community == 222))
+
+unique(V(coPurchaseNetworkGraph)$Group)
+
+V(communityGraph)$color=V(communityGraph)$Group 
+V(communityGraph)$color=gsub("Others","red",V(communityGraph)$color) 
+V(communityGraph)$color=gsub("Book","violet",V(communityGraph)$color) 
+V(communityGraph)$color=gsub("Music","green",V(communityGraph)$color) 
+V(communityGraph)$color=gsub("DVD","orange",V(communityGraph)$color) 
+V(communityGraph)$color=gsub("Video","yellow",V(communityGraph)$color) 
+
+
+tkplot(
+  communityGraph,
+  vertex.size = 9,
+  vertex.label = V(communityGraph)$Title,
+  vertex.label.dist = -2,
+  edge.arrow.size = 0.5,
+  edge.color = "black",
+  canvas.width = 450,
+  canvas.height = 500,
+  layout= layout.circle,
+  vertex.color=V(communityGraph)$color
+)
+
+
+##############################################################################################################################
+# Identify Top Products based on salesRank
+##############################################################################################################################
+
+
+topCommunityProducts = function(networkGraph,communityMembership,topCommunityProductCount = 5){
+  
+  # Create a subgraph for the given community from the main network graph 
+  communityGraph <-induced.subgraph(networkGraph, which(V(networkGraph)$Community==communityMembership))
+  
+  # extract nodeId, salesRank, title, group and averageRating from the community graph 
+  nodes <- as.vector(as.numeric(V(communityGraph)$name))
+  salesRank <- as.vector(V(communityGraph)$SalesRank)
+  title <- as.vector(V(communityGraph)$Title)
+  group <- as.vector(V(communityGraph)$Group)
+  averageRating <- as.vector(V(communityGraph)$AverageRating)
+  
+  
+  # Create a dataframe
+  nodesDataFrame <- data.frame(nodes,title,group,salesRank,averageRating)
+  
+  # Filter DataFrame (Remove all rows with salesRank less than 0 )
+  nodesDataFrame <- nodesDataFrame[nodesDataFrame$salesRank>0,]
+  
+  # Sort DataFrame rows based on salesRank 
+  nodesDataFrame <- arrange(nodesDataFrame,salesRank)
+  
+  # Rename DataFrame Columns
+  colnames(nodesDataFrame) <- c("NodeId","Title","Group","SalesRank","AverageRating")
+  
+  # Return top n products within community based on salesRank (n = topCommunityProductCount)
+  return(head(nodesDataFrame,topCommunityProductCount))
+  
+}
+
+topCommunityProducts(coPurchaseNetworkGraph,3)
+
+##############################################################################################################################
+# I)   Create Subgraph for the given community 
+# II)  Identify cliques of size 4 within the subgraph 
+# III) Filter out cliques based on the given productId 
+# IV)  Export cliques 
+##############################################################################################################################
+
+exportCliques = function(networkGraph,communityMembership,productNodeId){
+  
+  # Create a subgraph for the given community from the main network graph 
+  communityGraph <-induced.subgraph(networkGraph, which(V(networkGraph)$Community==communityMembership))
+  
+  
+  # Identify cliques from the community graph 
+  # The output of the following funciton is a list object consisting of vectors of vertices of cliques
+  CliqueVertexList = cliques(communityGraph,min = 4,max = 4)
+  
+  # convert the vector of vertices for a given clique to graph object and save it to list object 
+  CliqueList <- lapply(CliqueVertexList, function (x) { induced_subgraph(communityGraph, x) })
+  
+  # check if the given productNodeId is present within clique graph objects 
+  ProductBasedCliqueFlagList = sapply(CliqueList, function(x){as.vector(table(V(x)$name==productNodeId))[2]})
+  ProductBasedCliqueFlagList <- ifelse(is.na(ProductBasedCliqueFlagList),0,1)
+  
+  # Filter out all clique graph objects where productNodeId is not present 
+  ProductBasedCliqueList <- CliqueList[ProductBasedCliqueFlagList==1]
+  
+  cliquesDataFrameList <- lapply(ProductBasedCliqueList, 
+                                 function(y) {as.data.frame(list(NodeId=as.numeric(V(y)$name),
+                                                                 Title = as.character(V(y)$Title),Group=as.vector(V(y)$Group),
+                                                                 SalesRank=as.numeric(V(y)$SalesRank),AverageRating=as.numeric(V(y)$AverageRating),
+                                                                 CliqueId = 1) , stringsAsFactors=FALSE)})
+  cliqueDataFrame <- data.frame() # Prepare 
+  tempCliqueFrame <- data.frame()
+  
+  for(i in 1:length(cliquesDataFrameList)){
+    tempCliqueFrame <- cliquesDataFrameList[[i]]
+    tempCliqueFrame$CliqueId = i
+    cliqueDataFrame = rbind(cliqueDataFrame,tempCliqueFrame)
+  }
+  cliqueDataFrame$CommunityMembership = communityMembership
+  cliqueDataFrame$PopularProductId = productNodeId
+  
+  write.csv(cliqueDataFrame,"cliquesData.csv",row.names = F)
+  View(cliqueDataFrame)
+}
+
+exportCliques(coPurchaseNetworkGraph,3,600)
+
+
+
+
+```
+
+## Conclusion  
+  
+* Our analysis helped us to understand the recommendable pair of products based on the popularity of co- purchase and logical pairing. 
+* Helped to identify the list of products which could be sold together as bundles.
+* We were able to develop a csv file which includes all the possible cliques of top products within top co-purchase communities. It helps in the upselling process.
+* Found out that category similarity is really useful when predicting the co-purchasing pairs, which means that items within the similar categories tend to be purchased together more often.
+
+## References
+
+[Social Network Analysis](https://en.wikipedia.org/wiki/Social_network_analysis)  
+[Amazon Meta Data](http://snap.stanford.edu/data/amazon-meta.html)  
+[iGraph](https://en.wikipedia.org/wiki/Igraph)
